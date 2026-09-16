@@ -1,0 +1,129 @@
+---
+title: "Intolerance In-Class Activity Solutions"
+output: pdf_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggrepel)
+```
+
+## Step 1: Load data 
+
+```{r}
+gene_df <- read_tsv("gnomAD_gene_counts_subset_RVIS_upd.tsv")
+head(gene_df)
+```
+
+```{r}
+## generate a scatterplot of the data
+gene_df_filt <- gene_df %>% filter(num_common_functional<140)
+ggplot(data=gene_df_filt, mapping=aes(x=total_coding_variants, y=num_common_functional)) +
+  geom_point() +
+  xlab("Total Num. Protein-Coding Variants") +
+  ylab("Num. Common (MAF>0.1%) Functional Variants") +
+  theme_bw() +
+  ggtitle("Total Protein-Coding Variants vs Common Functional Variants") 
+```
+
+## Step 2: fit the linear model and calculate studentized residuals
+
+```{r}
+rvis_regress <- lm(num_common_functional ~ total_coding_variants, data=gene_df)
+summary(rvis_regress)
+```
+
+```{r}
+student_resid <- rstudent(rvis_regress)
+head(student_resid)
+```
+
+```{r}
+gene_df$RVIS = student_resid
+```
+
+```{r}
+## to create a plot like the one in the paper
+gene_df <- gene_df %>%
+  mutate(RVIS_group = case_when(RVIS <= quantile(RVIS, 0.02) ~ "Bottom 2% (Most Intolerant)",
+                                RVIS >= quantile(RVIS, 0.98) ~ "Top 2% (Least Intolerant)",
+                                TRUE ~ ""))
+
+gene_df_2 <- gene_df %>% filter(num_common_functional<140)
+
+label_df <- bind_rows(
+  slice_max(gene_df_2, RVIS, n = 5),
+  slice_min(gene_df_2, RVIS, n = 5)
+)
+
+ggplot(gene_df, aes(y=num_common_functional, x=total_coding_variants)) +
+  geom_point(color = "grey85", size = 2) +
+  geom_point(
+    data = filter(gene_df, RVIS_group != ""),
+    aes(color = RVIS_group),
+    size = 2.5
+  ) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  scale_color_manual(
+    values = c(
+      "Bottom 2% (Most Intolerant)" = "red",
+      "Top 2% (Least Intolerant)" = "blue"
+    )
+  ) +
+  theme_bw() +
+  geom_text_repel(data = label_df, aes(label = gene), size = 3) +
+  xlab("Total Num. Protein-Coding Variants") +
+  ylab("Num. Common (MAF>0.1%) Functional Variants") +
+  theme(legend.title = element_blank(),
+        legend.position = "bottom") +
+  ylim(c(0,140)) +
+  xlim(c(0,20000))
+```
+
+## Step 3: examine a few genes and interpret
+
+```{r}
+extremes_df <- bind_rows(
+  slice_max(gene_df, RVIS, n = 10),
+  slice_min(gene_df, RVIS, n = 10)
+)
+print(extremes_df)
+```
+
+```{r}
+## disease gene associated with developmental epileptic encephalopathy
+gene_df %>% filter(gene=="SCN1A")
+```
+
+```{r}
+## disease gene associated with Kabuki syndrome
+gene_df %>% filter(gene=="KMT2D")
+```
+
+```{r}
+gene_df %>% filter(gene=="SETD1A")
+```
+
+```{r}
+gene_df %>% filter(gene=="ARID1B")
+```
+
+```{r}
+gene_df %>% filter(gene=="POGZ")
+```
+
+```{r}
+gene_df %>% filter(gene=="OR10G4")
+```
+
+```{r}
+gene_df %>% filter(gene=="TAS1R2")
+```
+
+```{r}
+gene_df %>% filter(gene=="OR1A1")
+```
+
